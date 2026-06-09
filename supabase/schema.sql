@@ -52,6 +52,21 @@ create policy "Users own their runs" on runs
     automation_id in (select id from automations where user_id = auth.uid())
   );
 
+-- Subscriptions table (managed by Stripe webhook)
+create table if not exists subscriptions (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references auth.users(id) on delete cascade not null unique,
+  plan text default 'free' check (plan in ('free', 'pro', 'team')),
+  status text default 'inactive' check (status in ('active', 'inactive')),
+  stripe_customer_id text,
+  stripe_subscription_id text,
+  updated_at timestamptz default now()
+);
+
+alter table subscriptions enable row level security;
+create policy "Users read own subscription" on subscriptions
+  for select using (auth.uid() = user_id);
+
 -- Generated sites table
 create table if not exists generated_sites (
   id uuid default gen_random_uuid() primary key,

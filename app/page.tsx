@@ -1,10 +1,11 @@
 'use client'
 import Link from 'next/link'
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import {
   Zap, Play, Globe, ArrowRight, Check, Sparkles, Mail, MessageSquare,
   FileText, Table, ShoppingBag, Github, Database, Hash, Star,
-  Clock, AlertCircle, TrendingUp, Shield,
+  Clock, AlertCircle, TrendingUp, Shield, Sun, Moon,
 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 
@@ -160,6 +161,20 @@ const FAQS = [
 /* ─── components ────────────────────────────────────────────────────────────── */
 
 function Navbar() {
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark')
+
+  useEffect(() => {
+    const saved = (localStorage.getItem('theme') || 'dark') as 'dark' | 'light'
+    setTheme(saved)
+  }, [])
+
+  function toggleTheme() {
+    const next = theme === 'dark' ? 'light' : 'dark'
+    setTheme(next)
+    localStorage.setItem('theme', next)
+    document.documentElement.setAttribute('data-theme', next)
+  }
+
   return (
     <nav className="fixed top-0 inset-x-0 z-50 border-b border-border/40 bg-bg/80 backdrop-blur-xl">
       <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
@@ -167,17 +182,24 @@ function Navbar() {
           <div className="w-8 h-8 bg-accent rounded-lg flex items-center justify-center shadow-lg shadow-accent/40">
             <Zap className="w-4 h-4 text-white" />
           </div>
-          <span className="font-bold text-lg text-white">AutoFlow</span>
+          <span className="font-bold text-lg" style={{ color: 'var(--color-text)' }}>AutoFlow</span>
         </Link>
 
         <div className="hidden md:flex items-center gap-8">
           {[['Features', '#features'], ['Use Cases', '#usecases'], ['Pricing', '#pricing'], ['FAQ', '#faq']].map(([label, href]) => (
-            <a key={href} href={href} className="text-sm text-muted hover:text-white transition-colors">{label}</a>
+            <a key={href} href={href} className="text-sm text-muted hover:text-accent transition-colors">{label}</a>
           ))}
         </div>
 
         <div className="flex items-center gap-3">
-          <Link href="/auth" className="text-sm text-muted hover:text-white transition-colors hidden sm:block">Sign in</Link>
+          <button
+            onClick={toggleTheme}
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-muted hover:text-accent hover:bg-surface-2 transition-colors"
+            title={theme === 'dark' ? 'Light mode' : 'Dark mode'}
+          >
+            {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+          </button>
+          <Link href="/auth" className="text-sm text-muted hover:text-accent transition-colors hidden sm:block">Sign in</Link>
           <Link href="/auth?tab=signup">
             <Button size="sm">Get Started Free</Button>
           </Link>
@@ -247,6 +269,82 @@ function Arrow() {
     <div className="flex items-center flex-shrink-0">
       <div className="h-0.5 w-8 bg-gradient-to-r from-accent/20 to-accent/80" />
       <div className="w-0 h-0 border-t-[5px] border-b-[5px] border-l-[8px] border-t-transparent border-b-transparent border-l-accent/80 -ml-px" />
+    </div>
+  )
+}
+
+function PricingCards() {
+  const [loading, setLoading] = useState<string | null>(null)
+
+  async function handlePlanClick(plan: typeof PLANS[0]) {
+    if (plan.name === 'Free') {
+      window.location.href = '/auth?tab=signup'
+      return
+    }
+    setLoading(plan.name)
+    try {
+      const res = await fetch('/api/create-checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plan: plan.name.toLowerCase() }),
+      })
+      const data = await res.json()
+      if (data.error === 'Not authenticated') {
+        window.location.href = '/auth?tab=signup'
+        return
+      }
+      if (data.url) window.location.href = data.url
+    } catch {
+      window.location.href = '/auth?tab=signup'
+    } finally {
+      setLoading(null)
+    }
+  }
+
+  return (
+    <div className="grid md:grid-cols-3 gap-6 items-start">
+      {PLANS.map((plan, i) => (
+        <motion.div
+          key={plan.name}
+          initial={{ opacity: 0, y: 24 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ delay: i * 0.1 }}
+          className={`rounded-2xl p-7 border relative ${
+            plan.highlight
+              ? 'border-accent bg-gradient-to-b from-accent/10 to-surface shadow-2xl shadow-accent/10'
+              : 'border-border bg-surface'
+          }`}
+        >
+          {plan.highlight && (
+            <span className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-accent text-white text-xs font-bold px-4 py-1 rounded-full shadow-lg shadow-accent/30">
+              Most Popular
+            </span>
+          )}
+          <h3 className="text-lg font-bold" style={{ color: 'var(--color-text)' }}>{plan.name}</h3>
+          <p className="text-sm text-muted mt-1 mb-5 min-h-[40px]">{plan.blurb}</p>
+          <div className="flex items-end gap-1 mb-6">
+            <span className="text-4xl font-bold" style={{ color: 'var(--color-text)' }}>{plan.price}</span>
+            <span className="text-muted text-sm mb-1">{plan.cadence}</span>
+          </div>
+          <Button
+            variant={plan.highlight ? 'primary' : 'secondary'}
+            className="w-full mb-6"
+            loading={loading === plan.name}
+            onClick={() => handlePlanClick(plan)}
+          >
+            {plan.cta}
+          </Button>
+          <ul className="space-y-3">
+            {plan.features.map(f => (
+              <li key={f} className="flex items-start gap-2.5 text-sm text-muted">
+                <Check className={`w-4 h-4 mt-0.5 flex-shrink-0 ${plan.highlight ? 'text-accent' : 'text-success'}`} />
+                {f}
+              </li>
+            ))}
+          </ul>
+        </motion.div>
+      ))}
     </div>
   )
 }
@@ -462,47 +560,7 @@ export default function LandingPage() {
           <h2 className="text-3xl md:text-4xl font-bold text-white mb-3">Simple, honest pricing</h2>
           <p className="text-muted">Start free. Upgrade when you're ready. Cancel anytime.</p>
         </div>
-        <div className="grid md:grid-cols-3 gap-6 items-start">
-          {PLANS.map((plan, i) => (
-            <motion.div
-              key={plan.name}
-              initial={{ opacity: 0, y: 24 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: i * 0.1 }}
-              className={`rounded-2xl p-7 border relative ${
-                plan.highlight
-                  ? 'border-accent bg-gradient-to-b from-accent/10 to-surface shadow-2xl shadow-accent/10'
-                  : 'border-border bg-surface'
-              }`}
-            >
-              {plan.highlight && (
-                <span className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-accent text-white text-xs font-bold px-4 py-1 rounded-full shadow-lg shadow-accent/30">
-                  Most Popular
-                </span>
-              )}
-              <h3 className="text-lg font-bold text-white">{plan.name}</h3>
-              <p className="text-sm text-muted mt-1 mb-5 min-h-[40px]">{plan.blurb}</p>
-              <div className="flex items-end gap-1 mb-6">
-                <span className="text-4xl font-bold text-white">{plan.price}</span>
-                <span className="text-muted text-sm mb-1">{plan.cadence}</span>
-              </div>
-              <Link href="/auth?tab=signup">
-                <Button variant={plan.highlight ? 'primary' : 'secondary'} className="w-full mb-6">
-                  {plan.cta}
-                </Button>
-              </Link>
-              <ul className="space-y-3">
-                {plan.features.map(f => (
-                  <li key={f} className="flex items-start gap-2.5 text-sm text-muted">
-                    <Check className={`w-4 h-4 mt-0.5 flex-shrink-0 ${plan.highlight ? 'text-accent' : 'text-success'}`} />
-                    {f}
-                  </li>
-                ))}
-              </ul>
-            </motion.div>
-          ))}
-        </div>
+        <PricingCards />
       </section>
 
       {/* ── FAQ ── */}

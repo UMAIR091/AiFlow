@@ -3,37 +3,68 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Dark theme (default) ─────────────────────────────────────────────────── */
 :root {
-  --bg: #0a0a0f;
-  --surface: #12121a;
-  --accent: #7c6fff;
+  --color-bg: #0a0a0f;
+  --color-surface: #12121a;
+  --color-surface-2: #1a1a26;
+  --color-accent: #7c6fff;
+  --color-accent-light: #9d8fff;
+  --color-accent-dark: #5a4fd6;
+  --color-border: #2a2a3a;
+  --color-muted: #6b7280;
+  --color-success: #22c55e;
+  --color-warning: #f59e0b;
+  --color-danger: #ef4444;
+  --color-text: #ffffff;
+}
+
+/* ── Light theme ──────────────────────────────────────────────────────────── */
+[data-theme="light"] {
+  --color-bg: #f4f6fb;
+  --color-surface: #ffffff;
+  --color-surface-2: #eef0f7;
+  --color-accent: #7c6fff;
+  --color-accent-light: #6457e8;
+  --color-accent-dark: #5a4fd6;
+  --color-border: #dde0ea;
+  --color-muted: #7b829a;
+  --color-success: #16a34a;
+  --color-warning: #d97706;
+  --color-danger: #dc2626;
+  --color-text: #0f1117;
 }
 
 * { box-sizing: border-box; }
 
 body {
-  background-color: var(--bg);
-  color: white;
+  background-color: var(--color-bg);
+  color: var(--color-text);
   font-family: 'Inter', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
+/* Light mode text overrides */
+[data-theme="light"] .text-white { color: var(--color-text) !important; }
+[data-theme="light"] .text-muted { color: var(--color-muted) !important; }
+
 /* ReactFlow overrides */
-.react-flow__background { background-color: var(--bg) !important; }
-.react-flow__controls { background: var(--surface) !important; border: 1px solid #2a2a3a !important; border-radius: 8px !important; }
-.react-flow__controls-button { background: var(--surface) !important; border-color: #2a2a3a !important; color: white !important; }
-.react-flow__minimap { background: var(--surface) !important; border: 1px solid #2a2a3a !important; border-radius: 8px !important; }
+.react-flow__background { background-color: var(--color-bg) !important; }
+.react-flow__controls { background: var(--color-surface) !important; border: 1px solid var(--color-border) !important; border-radius: 8px !important; }
+.react-flow__controls-button { background: var(--color-surface) !important; border-color: var(--color-border) !important; color: var(--color-text) !important; }
+.react-flow__minimap { background: var(--color-surface) !important; border: 1px solid var(--color-border) !important; border-radius: 8px !important; }
 
 /* Scrollbar */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #2a2a3a; border-radius: 3px; }
+::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: #7c6fff44; }
 
 /* Selection */
 ::selection { background: #7c6fff33; }
 
-/* Integrations marquee (landing page) */
+/* Integrations marquee */
 @keyframes marquee {
   0% { transform: translateX(0); }
   100% { transform: translateX(-50%); }
@@ -48,5 +79,4 @@ body {
 }
 .animate-marquee:hover { animation-play-state: paused; }
 
-/* Smooth anchor scrolling for landing nav links */
 html { scroll-behavior: smooth; }

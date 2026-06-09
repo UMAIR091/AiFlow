@@ -8,8 +8,25 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className="dark scroll-smooth">
-      <body className="bg-bg text-white min-h-screen">{children}</body>
+    <html lang="en" className="scroll-smooth" suppressHydrationWarning>
+      <head>
+        {/* Inline script runs before paint — prevents theme flash */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                try {
+                  var t = localStorage.getItem('theme') || 'dark';
+                  document.documentElement.setAttribute('data-theme', t);
+                } catch(e) {}
+              })();
+            `,
+          }}
+        />
+      </head>
+      <body className="bg-bg min-h-screen" style={{ color: 'var(--color-text)' }}>
+        {children}
+      </body>
     </html>
   )
 }
