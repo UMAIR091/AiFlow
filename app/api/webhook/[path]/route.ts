@@ -28,9 +28,9 @@ export async function POST(
       payload = await req.json()
     } else if (contentType.includes('application/x-www-form-urlencoded') || contentType.includes('multipart/form-data')) {
       const formData = await req.formData()
-      for (const [key, value] of formData.entries()) {
+      formData.forEach((value, key) => {
         payload[key] = value
-      }
+      })
     }
   } catch {
     // Payload parsing failed — proceed with empty payload
