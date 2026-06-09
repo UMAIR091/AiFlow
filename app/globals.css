@@ -1,0 +1,52 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #0a0a0f;
+  --surface: #12121a;
+  --accent: #7c6fff;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  background-color: var(--bg);
+  color: white;
+  font-family: 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ReactFlow overrides */
+.react-flow__background { background-color: var(--bg) !important; }
+.react-flow__controls { background: var(--surface) !important; border: 1px solid #2a2a3a !important; border-radius: 8px !important; }
+.react-flow__controls-button { background: var(--surface) !important; border-color: #2a2a3a !important; color: white !important; }
+.react-flow__minimap { background: var(--surface) !important; border: 1px solid #2a2a3a !important; border-radius: 8px !important; }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #2a2a3a; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #7c6fff44; }
+
+/* Selection */
+::selection { background: #7c6fff33; }
+
+/* Integrations marquee (landing page) */
+@keyframes marquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+.animate-marquee {
+  animation: marquee 32s linear infinite;
+  width: max-content;
+}
+.marquee-mask {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 12%, #000 88%, transparent);
+  mask-image: linear-gradient(to right, transparent, #000 12%, #000 88%, transparent);
+}
+.animate-marquee:hover { animation-play-state: paused; }
+
+/* Smooth anchor scrolling for landing nav links */
+html { scroll-behavior: smooth; }
