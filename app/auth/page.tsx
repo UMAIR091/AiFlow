@@ -22,13 +22,13 @@ function AuthForm() {
   )
   const [success, setSuccess] = useState('')
 
-  const supabase = createClient()
-
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError('')
     setSuccess('')
     setLoading(true)
+
+    const supabase = createClient()
 
     try {
       if (tab === 'signup') {
