@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
 
   switch (event.type) {
     case 'checkout.session.completed': {
-      const session = event.data.object as Stripe.CheckoutSession
+      const session = event.data.object as Stripe.Checkout.Session
       const userId = getMetadata(session).user_id
       const plan = getMetadata(session).plan
       if (userId && plan) {
