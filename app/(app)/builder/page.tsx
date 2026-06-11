@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -45,9 +45,16 @@ export default function BuilderPage() {
   const [error, setError] = useState('')
   const [placeholder] = useState(() => PLACEHOLDERS[Math.floor(Math.random() * PLACEHOLDERS.length)])
 
+  // Restore an unfinished description so a refresh doesn't lose the user's work.
+  useEffect(() => {
+    const saved = localStorage.getItem('builder_description')
+    if (saved) setDescription(saved)
+  }, [])
+
   // Step 1 → Step 2: analyze what's needed
   async function handleAnalyze() {
     if (!description.trim()) return
+    localStorage.setItem('builder_description', description)
     setAnalyzing(true)
     setError('')
 
@@ -138,6 +145,7 @@ export default function BuilderPage() {
 
       if (!automation?.id) throw new Error('Automation was created but no ID came back. Please try again.')
 
+      localStorage.removeItem('builder_description')
       router.push(`/builder/canvas?id=${automation.id}`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.')

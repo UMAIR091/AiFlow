@@ -44,6 +44,18 @@ function AuthForm() {
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password })
         if (error) throw error
+        // If user came from pricing page, send them to checkout
+        const pendingPlan = localStorage.getItem('pending_plan')
+        if (pendingPlan) {
+          localStorage.removeItem('pending_plan')
+          const res = await fetch('/api/create-checkout', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ plan: pendingPlan }),
+          })
+          const data = await res.json()
+          if (data.url) { window.location.href = data.url; return }
+        }
         router.push('/dashboard')
         router.refresh()
       }

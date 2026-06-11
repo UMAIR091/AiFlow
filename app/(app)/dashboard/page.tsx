@@ -25,5 +25,20 @@ export default async function DashboardPage() {
     runsToday: runs?.length ?? 0,
   }
 
-  return <DashboardClient automations={automations ?? []} stats={stats} />
+  // Free users (no active paid subscription) see an upgrade banner.
+  const { data: subscription } = await supabase
+    .from('subscriptions')
+    .select('status, plan')
+    .eq('user_id', user.id)
+    .maybeSingle()
+
+  const hasActiveSubscription = subscription?.status === 'active' && subscription?.plan !== 'free'
+
+  return (
+    <DashboardClient
+      automations={automations ?? []}
+      stats={stats}
+      hasActiveSubscription={hasActiveSubscription}
+    />
+  )
 }

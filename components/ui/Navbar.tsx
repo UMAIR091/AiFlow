@@ -23,6 +23,7 @@ export function Navbar() {
   useEffect(() => {
     const saved = (localStorage.getItem('theme') || 'dark') as 'dark' | 'light'
     setTheme(saved)
+    document.documentElement.setAttribute('data-theme', saved)
   }, [])
 
   function toggleTheme() {
@@ -40,7 +41,7 @@ export function Navbar() {
 
   return (
     <nav className="h-16 bg-surface border-b border-border flex items-center px-6 gap-6 sticky top-0 z-50">
-      <Link href="/dashboard" className="flex items-center gap-2 mr-4">
+      <Link href="/" className="flex items-center gap-2 mr-4">
         <div className="w-8 h-8 bg-accent rounded-lg flex items-center justify-center">
           <Zap className="w-4 h-4 text-white" />
         </div>

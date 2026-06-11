@@ -159,7 +159,7 @@ export function RunsClient({ automation, runs }: RunsClientProps) {
           </div>
           <h2 className="text-lg font-semibold text-white mb-1">No runs yet</h2>
           <p className="text-sm text-muted">
-            Run this automation from the dashboard and the results will appear here.
+            Run this automation from the dashboard to see logs here.
           </p>
           <Link
             href="/dashboard"

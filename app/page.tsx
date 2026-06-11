@@ -166,6 +166,7 @@ function Navbar() {
   useEffect(() => {
     const saved = (localStorage.getItem('theme') || 'dark') as 'dark' | 'light'
     setTheme(saved)
+    document.documentElement.setAttribute('data-theme', saved)
   }, [])
 
   function toggleTheme() {
@@ -290,6 +291,7 @@ function PricingCards() {
       })
       const data = await res.json()
       if (data.error === 'Not authenticated') {
+        localStorage.setItem('pending_plan', plan.name.toLowerCase())
         window.location.href = '/auth?tab=signup'
         return
       }

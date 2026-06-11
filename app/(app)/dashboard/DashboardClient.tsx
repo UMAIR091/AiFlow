@@ -15,9 +15,10 @@ import type { Automation } from '@/types/automation'
 interface DashboardClientProps {
   automations: Automation[]
   stats: { total: number; active: number; runsToday: number }
+  hasActiveSubscription?: boolean
 }
 
-export function DashboardClient({ automations: initial, stats }: DashboardClientProps) {
+export function DashboardClient({ automations: initial, stats, hasActiveSubscription = false }: DashboardClientProps) {
   const supabase = createClient()
   const [automations, setAutomations] = useState(initial)
   const [runningId, setRunningId] = useState<string | null>(null)
@@ -95,6 +96,21 @@ export function DashboardClient({ automations: initial, stats }: DashboardClient
         </Link>
       </div>
 
+      {/* Upgrade banner for free users */}
+      {!hasActiveSubscription && (
+        <div className="mb-6 flex items-center justify-between gap-3 flex-wrap bg-accent/10 border border-accent/20 rounded-xl px-4 py-3">
+          <p className="text-sm text-muted">
+            You&apos;re on the free plan — limited to 5 automations and 100 runs/month.
+          </p>
+          <Link
+            href="/#pricing"
+            className="text-sm font-semibold text-accent hover:text-accent-light transition-colors whitespace-nowrap"
+          >
+            Upgrade to Pro →
+          </Link>
+        </div>
+      )}
+
       {/* Stats */}
       <div className="grid grid-cols-3 gap-4 mb-8">
         {[
@@ -125,7 +141,7 @@ export function DashboardClient({ automations: initial, stats }: DashboardClient
             <Zap className="w-10 h-10 text-accent/50" />
           </div>
           <h2 className="text-xl font-semibold text-white mb-2">No automations yet</h2>
-          <p className="text-muted mb-6">Describe what you want to automate and let AI build it for you.</p>
+          <p className="text-muted mb-6">Describe what you want automated and the AI will build it for you.</p>
           <Link href="/builder">
             <Button size="lg">
               <Plus className="w-5 h-5" />
@@ -142,7 +158,7 @@ export function DashboardClient({ automations: initial, stats }: DashboardClient
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.05 }}
             >
-              <Card className="flex items-center gap-4 group hover:border-accent/30 transition-all">
+              <Card className="flex items-center gap-4 flex-wrap sm:flex-nowrap group hover:border-accent/30 transition-all">
                 {/* Icon */}
                 <div className="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center text-accent flex-shrink-0">
                   <Zap className="w-5 h-5" />
@@ -164,7 +180,7 @@ export function DashboardClient({ automations: initial, stats }: DashboardClient
                 </div>
 
                 {/* Actions */}
-                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="flex items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                   <Button
                     variant="ghost"
                     size="sm"
