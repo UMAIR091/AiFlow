@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid signature' }, { status: 400 })
   }
 
-  const getMetadata = (obj: { metadata?: Record<string, string> }) => obj.metadata ?? {}
+  const getMetadata = (obj: { metadata?: Record<string, string> | null }) => obj.metadata ?? {}
 
   switch (event.type) {
     case 'checkout.session.completed': {
