@@ -43,6 +43,8 @@ export const APP_ICONS: Record<string, string> = {
   'http request': '🌐',
   schedule: '⏰',
   webhook: '🔗',
+  delay: '⏳',
+  'google forms': '📋',
   autoflow: '⚡',
   default: '⚙️',
 }

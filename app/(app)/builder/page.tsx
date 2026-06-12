@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Zap, Loader2, ChevronDown, ArrowLeft, ArrowRight,
-  CheckCircle, AlertCircle, Info,
+  CheckCircle, AlertCircle, Info, Play, LayoutDashboard, PencilLine,
 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
@@ -29,7 +29,7 @@ const NEEDS_CONNECTION = [
   'WhatsApp', 'Dropbox', 'OneDrive', 'Typeform',
 ]
 
-type Step = 'input' | 'preflight' | 'building'
+type Step = 'input' | 'preflight' | 'building' | 'done'
 
 export default function BuilderPage() {
   const router = useRouter()
@@ -44,6 +44,9 @@ export default function BuilderPage() {
   const [connectedApps, setConnectedApps] = useState<string[]>([])
   const [error, setError] = useState('')
   const [placeholder] = useState(() => PLACEHOLDERS[Math.floor(Math.random() * PLACEHOLDERS.length)])
+  const [built, setBuilt] = useState<{ id: string; name: string; workflow: WorkflowJSON } | null>(null)
+  const [runState, setRunState] = useState<'idle' | 'running' | 'done' | 'error'>('idle')
+  const [runMessage, setRunMessage] = useState('')
 
   // Restore an unfinished description so a refresh doesn't lose the user's work.
   useEffect(() => {
@@ -113,12 +116,21 @@ export default function BuilderPage() {
       const res = await fetch('/api/parse-automation', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ description: enrichedDescription, language }),
+        // answers lets the server auto-fill node settings (smart defaults)
+        body: JSON.stringify({ description: enrichedDescription, language, answers: fieldValues }),
       })
       const data = await res.json()
       if (data.error) throw new Error(data.error)
 
       const workflow: WorkflowJSON = data.workflow
+
+      // Sanity check: a usable automation needs a trigger + at least one action (≥2 nodes).
+      const nodeCount = (workflow?.trigger ? 1 : 0) + (Array.isArray(workflow?.actions) ? workflow.actions.length : 0)
+      if (nodeCount < 2) {
+        setError('Something went wrong building your automation. Please try describing it again with more detail.')
+        setStep('input')
+        return
+      }
 
       const { data: { user }, error: authErr } = await supabase.auth.getUser()
       if (authErr || !user) { router.push('/auth'); return }
@@ -146,10 +158,36 @@ export default function BuilderPage() {
       if (!automation?.id) throw new Error('Automation was created but no ID came back. Please try again.')
 
       localStorage.removeItem('builder_description')
-      router.push(`/builder/canvas?id=${automation.id}`)
+      setBuilt({ id: automation.id, name: automation.name, workflow })
+      setStep('done')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.')
       setStep('preflight')
+    }
+  }
+
+  // "Run it now" on the done screen — trigger the automation once, immediately.
+  async function handleRunNow() {
+    if (!built || runState === 'running') return
+    setRunState('running')
+    setRunMessage('')
+    try {
+      const res = await fetch('/api/run-automation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ automation_id: built.id, workflow: built.workflow }),
+      })
+      const data = await res.json()
+      if (data.error) throw new Error(data.error)
+      setRunState('done')
+      setRunMessage(
+        data.status === 'failed'
+          ? 'The run had problems — check the run log for details.'
+          : `Ran ${data.log?.length ?? 0} steps${data.note ? ' (some steps had issues)' : ' successfully'}.`
+      )
+    } catch (err) {
+      setRunState('error')
+      setRunMessage(err instanceof Error ? err.message : 'Could not run the automation.')
     }
   }
 
@@ -288,9 +326,28 @@ export default function BuilderPage() {
 
             {/* Summary */}
             <div className="mb-8">
-              <div className="flex items-start gap-3 p-4 bg-accent/10 border border-accent/20 rounded-xl mb-6">
-                <Info className="w-5 h-5 text-accent flex-shrink-0 mt-0.5" />
-                <p className="text-sm text-white">{preflight.summary}</p>
+              <div className="p-4 bg-accent/10 border border-accent/20 rounded-xl mb-6">
+                <div className="flex items-start gap-3">
+                  <Info className="w-5 h-5 text-accent flex-shrink-0 mt-0.5" />
+                  <p className="text-sm text-white">{preflight.summary}</p>
+                </div>
+                {preflight.steps && preflight.steps.length > 0 && (
+                  <div className="mt-4 pt-4 border-t border-accent/20">
+                    <p className="text-xs font-semibold text-accent-light uppercase tracking-wider mb-2">
+                      This automation will:
+                    </p>
+                    <ol className="space-y-1.5">
+                      {preflight.steps.map((s, i) => (
+                        <li key={i} className="flex items-start gap-2.5 text-sm text-white">
+                          <span className="flex-shrink-0 w-5 h-5 rounded-full bg-accent/20 text-accent-light text-xs font-bold flex items-center justify-center mt-0.5">
+                            {i + 1}
+                          </span>
+                          {s}
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+                )}
               </div>
 
               {/* Connection status */}
@@ -402,6 +459,73 @@ export default function BuilderPage() {
             <h2 className="text-xl font-bold text-white mb-2">Building your automation…</h2>
             <p className="text-sm text-muted">Claude AI is creating your workflow with all your settings pre-filled.</p>
             <p className="text-xs text-muted/50 mt-2">Usually takes 5–10 seconds</p>
+          </motion.div>
+        )}
+
+        {/* ── STEP 4: DONE ── */}
+        {step === 'done' && built && (
+          <motion.div
+            key="done"
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="text-center py-16"
+          >
+            <div className="w-16 h-16 bg-success/10 border border-success/30 rounded-2xl flex items-center justify-center mx-auto mb-6">
+              <CheckCircle className="w-8 h-8 text-success" />
+            </div>
+            <h2 className="text-2xl font-bold text-white mb-2">Your automation is ready!</h2>
+            <p className="text-muted mb-8">
+              <span className="text-white font-medium">{built.name}</span> has been built and saved.
+            </p>
+
+            <div className="flex items-center justify-center gap-3 flex-wrap mb-4">
+              <Button size="lg" onClick={handleRunNow} loading={runState === 'running'}>
+                <Play className="w-5 h-5" />
+                {runState === 'running' ? 'Running…' : 'Run it now'}
+              </Button>
+              <Button
+                variant="secondary"
+                size="lg"
+                onClick={() => router.push(`/builder/canvas?id=${built.id}`)}
+              >
+                <PencilLine className="w-5 h-5" />
+                Open in editor
+              </Button>
+              <Button
+                variant="ghost"
+                size="lg"
+                onClick={() => router.push('/dashboard')}
+              >
+                <LayoutDashboard className="w-5 h-5" />
+                Go to Dashboard
+              </Button>
+            </div>
+
+            <AnimatePresence>
+              {runMessage && (
+                <motion.div
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  className={`inline-flex items-center gap-2 text-sm rounded-xl px-4 py-2.5 border ${
+                    runState === 'error'
+                      ? 'bg-danger/10 border-danger/30 text-danger'
+                      : 'bg-success/10 border-success/30 text-success'
+                  }`}
+                >
+                  {runState === 'error' ? <AlertCircle className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
+                  {runMessage}
+                  {runState === 'done' && (
+                    <button
+                      onClick={() => router.push(`/runs/${built.id}`)}
+                      className="underline hover:text-white transition-colors ml-1"
+                    >
+                      View run log →
+                    </button>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
           </motion.div>
         )}
       </AnimatePresence>

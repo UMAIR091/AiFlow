@@ -61,6 +61,9 @@ export interface RunLogEntry {
   status: 'pending' | 'running' | 'success' | 'failed'
   message: string
   timestamp: string
+  /** How long the step took, in milliseconds. */
+  duration?: number
+  /** Relevant output from the step (API response data etc). */
   data?: unknown
 }
 

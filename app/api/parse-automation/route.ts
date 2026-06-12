@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { anthropic, PARSE_AUTOMATION_SYSTEM } from '@/lib/claude'
+import { anthropic, PARSE_AUTOMATION_SYSTEM, fillSmartDefaults } from '@/lib/claude'
 import type { WorkflowJSON, AutomationAction } from '@/types/automation'
 
 /** Pull the first valid JSON object out of the model's text, tolerating fences/prose. */
@@ -108,14 +108,14 @@ function normalizeWorkflow(raw: unknown, description: string): WorkflowJSON {
 }
 
 export async function POST(req: NextRequest) {
-  let body: { description?: string; language?: string }
+  let body: { description?: string; language?: string; answers?: Record<string, string> }
   try {
     body = await req.json()
   } catch {
     return NextResponse.json({ error: 'Invalid request. Please try again.' }, { status: 400 })
   }
 
-  const { description, language = 'en' } = body
+  const { description, language = 'en', answers = {} } = body
 
   if (!description?.trim()) {
     return NextResponse.json(
@@ -175,6 +175,8 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const workflow = normalizeWorkflow(raw, description)
+  // Fill empty node settings from the user's preflight answers (smart defaults),
+  // so the workflow is runnable without manual canvas edits.
+  const workflow = fillSmartDefaults(normalizeWorkflow(raw, description), answers)
   return NextResponse.json({ workflow })
 }

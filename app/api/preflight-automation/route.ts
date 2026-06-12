@@ -9,8 +9,17 @@ export interface PreflightField {
   default: string
 }
 
+export interface PreflightConnection {
+  app: string
+  needs: string
+}
+
 export interface PreflightResult {
   apps: string[]
+  /** Plain-English step descriptions, in execution order. */
+  steps: string[]
+  /** What credential/connection each app requires. */
+  connections: PreflightConnection[]
   fields: PreflightField[]
   summary: string
 }
@@ -55,6 +64,13 @@ export async function POST(req: NextRequest) {
 
     const result: PreflightResult = {
       apps: Array.isArray(raw.apps) ? raw.apps.map(String) : [],
+      steps: Array.isArray(raw.steps) ? raw.steps.map(String) : [],
+      connections: Array.isArray(raw.connections)
+        ? raw.connections.map((c: unknown) => {
+            const conn = (c ?? {}) as Record<string, unknown>
+            return { app: String(conn.app || ''), needs: String(conn.needs || '') }
+          }).filter(c => c.app)
+        : [],
       fields: Array.isArray(raw.fields)
         ? raw.fields.map((f: unknown) => {
             const field = (f ?? {}) as Record<string, unknown>
