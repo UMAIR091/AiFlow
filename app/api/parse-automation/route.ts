@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { anthropic, PARSE_AUTOMATION_SYSTEM, fillSmartDefaults } from '@/lib/claude'
-import type { WorkflowJSON, AutomationAction } from '@/types/automation'
+import { normalizeWorkflow, lintWorkflow } from '@/lib/workflow-validator'
+import type { WorkflowJSON } from '@/types/automation'
 
 /** Pull the first valid JSON object out of the model's text, tolerating fences/prose. */
 function extractJson(text: string): unknown {
@@ -15,19 +16,22 @@ function extractJson(text: string): unknown {
   return JSON.parse(cleaned)
 }
 
+const SYSTEM = [
+  {
+    type: 'text' as const,
+    text: PARSE_AUTOMATION_SYSTEM,
+    // System prompt is large and static → cache it to cut latency/cost.
+    cache_control: { type: 'ephemeral' as const },
+  },
+]
+
 /** One Claude call → parsed object. Throws SyntaxError if the output isn't valid JSON. */
 async function callClaude(description: string, langNote: string, strictNote = ''): Promise<unknown> {
   const message = await anthropic.messages.create({
     model: 'claude-sonnet-4-6',
-    max_tokens: 2048,
-    // System prompt is large and static → cache it to cut latency/cost on repeat calls.
-    system: [
-      {
-        type: 'text',
-        text: PARSE_AUTOMATION_SYSTEM,
-        cache_control: { type: 'ephemeral' },
-      },
-    ],
+    max_tokens: 4096, // headroom: a truncated workflow is invalid JSON
+    temperature: 0, // deterministic structured output
+    system: SYSTEM,
     messages: [
       {
         role: 'user',
@@ -39,72 +43,35 @@ async function callClaude(description: string, langNote: string, strictNote = ''
   return extractJson(text)
 }
 
-/** Coerce whatever the model returned into a valid, complete WorkflowJSON. */
-function normalizeWorkflow(raw: unknown, description: string): WorkflowJSON {
-  const w = (raw ?? {}) as Record<string, unknown>
-
-  // --- Trigger ---
-  const rawTrigger = (w.trigger ?? {}) as Record<string, unknown>
-  const trigger = {
-    app: String(rawTrigger.app || 'Manual'),
-    event: String(rawTrigger.event || 'Run Button Clicked'),
-    description: String(rawTrigger.description || 'Runs when you click the Run button.'),
-    settings: (rawTrigger.settings && typeof rawTrigger.settings === 'object'
-      ? rawTrigger.settings
-      : {}) as Record<string, unknown>,
-    config_fields: Array.isArray(rawTrigger.config_fields)
-      ? rawTrigger.config_fields.map(String)
-      : [],
-  }
-
-  // --- Actions ---
-  let rawActions = Array.isArray(w.actions) ? w.actions : []
-
-  // HARD RULE: never allow an empty actions array — synthesize a sensible default.
-  if (rawActions.length === 0) {
-    rawActions = [
+/**
+ * Self-repair pass: show the model its own (normalized) output plus the exact
+ * problems the linter found, and ask for a corrected version.
+ */
+async function callClaudeRepair(
+  description: string,
+  langNote: string,
+  previous: WorkflowJSON,
+  issues: string[]
+): Promise<unknown> {
+  const message = await anthropic.messages.create({
+    model: 'claude-sonnet-4-6',
+    max_tokens: 4096,
+    temperature: 0,
+    system: SYSTEM,
+    messages: [
+      { role: 'user', content: `${langNote}\n\nAutomation description: ${description}` },
+      { role: 'assistant', content: JSON.stringify(previous) },
       {
-        app: 'Slack',
-        action: 'Post Message',
-        description: `Notify about: ${description.slice(0, 80)}`,
-        settings: { channel: '', message: '' },
-        config_fields: ['channel', 'message'],
+        role: 'user',
+        content:
+          `Your workflow has problems. An automated checker compared it against the user's description and found:\n\n` +
+          issues.map(i => `- ${i}`).join('\n') +
+          `\n\nFix every problem and return the COMPLETE corrected workflow as ONLY a single valid JSON object — same shape as before, no prose, no code fences. Keep everything that was already correct.`,
       },
-    ]
-  }
-
-  const actions: AutomationAction[] = rawActions.map((a, i) => {
-    const action = (a ?? {}) as Record<string, unknown>
-    return {
-      id: String(action.id || `action_${i + 1}`),
-      app: String(action.app || 'HTTP Request'),
-      action: String(action.action || 'Call URL'),
-      description: String(action.description || ''),
-      settings: (action.settings && typeof action.settings === 'object'
-        ? action.settings
-        : {}) as Record<string, unknown>,
-      config_fields: Array.isArray(action.config_fields)
-        ? action.config_fields.map(String)
-        : [],
-      position:
-        action.position && typeof action.position === 'object'
-          ? (action.position as { x: number; y: number })
-          : { x: 350 + i * 270, y: 200 },
-    }
+    ],
   })
-
-  // --- Conditions (passthrough, best-effort) ---
-  const conditions = Array.isArray(w.conditions)
-    ? (w.conditions as WorkflowJSON['conditions'])
-    : []
-
-  return {
-    trigger,
-    actions,
-    conditions,
-    plain_summary: String(w.plain_summary || 'This automation runs the steps you described.'),
-    suggested_name: String(w.suggested_name || 'New Automation'),
-  }
+  const text = message.content[0]?.type === 'text' ? message.content[0].text : ''
+  return extractJson(text)
 }
 
 export async function POST(req: NextRequest) {
@@ -136,7 +103,7 @@ export async function POST(req: NextRequest) {
       ? `The user wrote in ${language}. Understand their intent but always return JSON in English. `
       : ''
 
-  // Attempt 1, then one retry with a stronger "JSON only" nudge if parsing fails.
+  // ── Pass 1: generate (with one JSON-format retry) ──────────────────────────
   let raw: unknown
   try {
     raw = await callClaude(description, langNote)
@@ -175,8 +142,33 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Fill empty node settings from the user's preflight answers (smart defaults),
-  // so the workflow is runnable without manual canvas edits.
-  const workflow = fillSmartDefaults(normalizeWorkflow(raw, description), answers)
-  return NextResponse.json({ workflow })
+  // ── Pass 2: normalize deterministically, then lint against the description ──
+  let workflow = normalizeWorkflow(raw, description)
+  let issues = lintWorkflow(workflow, description)
+  let repaired = false
+
+  // ── Pass 3: self-repair when the linter caught real gaps ───────────────────
+  if (issues.length > 0) {
+    try {
+      const fixedRaw = await callClaudeRepair(description, langNote, workflow, issues)
+      const fixed = normalizeWorkflow(fixedRaw, description)
+      const fixedIssues = lintWorkflow(fixed, description)
+      // Only adopt the repair if it didn't make things worse.
+      if (fixedIssues.length < issues.length || (fixedIssues.length === issues.length && fixed.actions.length >= workflow.actions.length)) {
+        workflow = fixed
+        issues = fixedIssues
+        repaired = true
+      }
+    } catch (err) {
+      console.error('parse-automation repair pass failed (keeping original):', err)
+    }
+  }
+
+  // ── Pass 4: fill empty settings from the user's preflight answers ──────────
+  workflow = fillSmartDefaults(workflow, answers)
+
+  return NextResponse.json({
+    workflow,
+    quality: { repaired, remaining_issues: issues },
+  })
 }

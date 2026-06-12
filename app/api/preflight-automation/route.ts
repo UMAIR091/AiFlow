@@ -54,7 +54,8 @@ export async function POST(req: NextRequest) {
   try {
     const message = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',   // Fast + cheap for pre-flight analysis
-      max_tokens: 1024,
+      max_tokens: 1536,
+      temperature: 0,                        // deterministic structured output
       system: [{ type: 'text', text: PREFLIGHT_SYSTEM, cache_control: { type: 'ephemeral' } }],
       messages: [{ role: 'user', content: `Automation description: ${description}` }],
     })
