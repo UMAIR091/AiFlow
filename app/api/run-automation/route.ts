@@ -19,6 +19,7 @@ function pick(settings: Record<string, unknown>, ...keys: string[]): unknown {
 /**
  * Required config per app. Each inner array is a group of equivalent keys —
  * at least one key in each group must be filled for the step to run.
+ * (Discord is intentionally absent — it has its own friendly missing-URL message.)
  */
 const REQUIRED_FIELDS: Record<string, string[][]> = {
   slack: [['channel'], ['message']],
@@ -26,17 +27,28 @@ const REQUIRED_FIELDS: Record<string, string[][]> = {
   email: [['to']],
   'google sheets': [['spreadsheet_id', 'spreadsheetId']],
   notion: [['database_id', 'databaseId']],
-  discord: [['webhook_url', 'webhookUrl', 'channel_id']],
   'http request': [['url']],
   delay: [['duration']],
 }
 
-/** Returns the missing field name, or null when all required config is present. */
+/** Plain-English names for config keys, so users never see raw field names. */
+const FIELD_LABELS: Record<string, string> = {
+  to: 'recipient email address',
+  channel: 'Slack channel',
+  message: 'message text',
+  spreadsheet_id: 'spreadsheet name or ID',
+  database_id: 'Notion database',
+  url: 'web address (URL)',
+  duration: 'wait time in seconds',
+  webhook_url: 'Discord webhook URL',
+}
+
+/** Returns a plain-English missing-field label, or null when all required config is present. */
 function findMissingField(app: string, settings: Record<string, unknown>): string | null {
   const groups = REQUIRED_FIELDS[app.toLowerCase()]
   if (!groups) return null
   for (const group of groups) {
-    if (pick(settings, ...group) === undefined) return group[0]
+    if (pick(settings, ...group) === undefined) return FIELD_LABELS[group[0]] ?? group[0]
   }
   return null
 }
@@ -106,10 +118,10 @@ async function executeStep(
 ): Promise<StepResult> {
   const appLower = app.toLowerCase()
 
-  // Validate required config before touching any API.
+  // Validate required config before touching any API — plain English, no field names.
   const missing = findMissingField(app, settings)
   if (missing) {
-    return { success: false, message: `Missing required field: ${missing} for ${app}` }
+    return { success: false, message: `Missing: ${missing}` }
   }
 
   // ── Delay ──────────────────────────────────────────────────────────────────
@@ -124,7 +136,7 @@ async function executeStep(
   // ── Slack ──────────────────────────────────────────────────────────────────
   if (appLower === 'slack') {
     const token = connections['slack']?.api_key || connections['slack']?.access_token
-    if (!token) return { success: false, message: 'Slack not connected. Go to Connections to link your Slack bot token.' }
+    if (!token) return { success: false, message: 'Slack not connected. Go to Connections to add your Slack token.' }
     try {
       const channel = String(pick(settings, 'channel'))
       const text = String(pick(settings, 'message', 'text'))
@@ -134,41 +146,51 @@ async function executeStep(
         body: JSON.stringify({ channel, text }),
       })
       const data = await res.json()
-      if (!data.ok) return { success: false, message: `Slack error: ${data.error}` }
+      if (!data.ok) {
+        const friendly = data.error === 'channel_not_found'
+          ? `Slack channel "${channel}" not found. Check the channel name.`
+          : 'Slack message could not be sent. Check your Slack connection in Connections.'
+        return { success: false, message: friendly }
+      }
       return { success: true, message: `Message sent to ${channel}`, data }
     } catch {
-      return { success: false, message: 'Could not reach Slack. Check your bot token.' }
+      return { success: false, message: 'Slack message could not be sent. Check your Slack connection in Connections.' }
     }
   }
 
   // ── Gmail / Email (via Resend) ─────────────────────────────────────────────
+  // No env-var guard: attempt the call directly and translate any failure into
+  // a friendly message. The key lives in the Vercel environment.
   if (appLower === 'gmail' || appLower === 'email') {
-    const resendKey = process.env.RESEND_API_KEY
-    if (!resendKey) return { success: false, message: 'Email sending not configured. Add RESEND_API_KEY to your environment.' }
     const to = String(pick(settings, 'to'))
     try {
       const res = await fetch('https://api.resend.com/emails', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
+        headers: {
+          Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({
-          from: process.env.RESEND_FROM_EMAIL || 'AutoFlow <noreply@autoflow.app>',
+          from: process.env.RESEND_FROM_EMAIL || 'AutoFlow <onboarding@resend.dev>',
           to: [to],
-          subject: String(pick(settings, 'subject') ?? 'Notification from AutoFlow'),
-          html: `<p>${String(pick(settings, 'body', 'message') ?? 'Your automation ran successfully.').replace(/\n/g, '<br>')}</p>`,
+          subject: String(pick(settings, 'subject') ?? 'AutoFlow Automation'),
+          html: String(pick(settings, 'body', 'message') ?? 'Automated message from AutoFlow').replace(/\n/g, '<br>'),
         }),
       })
+      if (!res.ok) {
+        return { success: false, message: 'Email could not be sent. Please check your Resend connection in Settings.' }
+      }
       const data = await res.json()
-      if (!res.ok) return { success: false, message: `Email error: ${data.message || 'Unknown error'}` }
       return { success: true, message: `Email sent to ${to}`, data }
     } catch {
-      return { success: false, message: 'Could not send email. Check your Resend API key.' }
+      return { success: false, message: 'Email could not be sent. Please check your Resend connection in Settings.' }
     }
   }
 
   // ── Google Sheets ──────────────────────────────────────────────────────────
   if (appLower === 'google sheets') {
     const token = connections['google_sheets']?.access_token
-    if (!token) return { success: false, message: 'Google Sheets not connected. Go to Connections to link Google Sheets.' }
+    if (!token) return { success: false, message: 'Google Sheets not connected. Go to Connections to add your Google account.' }
     const spreadsheetId = String(pick(settings, 'spreadsheet_id', 'spreadsheetId'))
     const sheetName = String(pick(settings, 'sheet_name', 'sheetName') ?? 'Sheet1')
     try {
@@ -185,17 +207,17 @@ async function executeStep(
         }
       )
       const data = await res.json()
-      if (!res.ok) return { success: false, message: `Google Sheets error: ${data.error?.message || 'Unknown error'}` }
+      if (!res.ok) return { success: false, message: 'Could not add the row. Check your Google Sheets connection and the spreadsheet name.' }
       return { success: true, message: `Row added to "${sheetName}"`, data }
     } catch {
-      return { success: false, message: 'Could not reach Google Sheets. Check your access token.' }
+      return { success: false, message: 'Could not reach Google Sheets. Check your Google connection in Connections.' }
     }
   }
 
   // ── Notion ─────────────────────────────────────────────────────────────────
   if (appLower === 'notion') {
     const token = connections['notion']?.api_key
-    if (!token) return { success: false, message: 'Notion not connected. Go to Connections to link Notion.' }
+    if (!token) return { success: false, message: 'Notion not connected. Go to Connections to add your Notion token.' }
     const databaseId = String(pick(settings, 'database_id', 'databaseId'))
     try {
       const extraProps = pick(settings, 'properties')
@@ -215,47 +237,34 @@ async function executeStep(
         }),
       })
       const data = await res.json()
-      if (!res.ok) return { success: false, message: `Notion error: ${data.message || 'Unknown error'}` }
+      if (!res.ok) return { success: false, message: 'Could not create the Notion page. Check your Notion connection and database.' }
       return { success: true, message: `Page created in Notion database`, data }
     } catch {
-      return { success: false, message: 'Could not reach Notion. Check your API key.' }
+      return { success: false, message: 'Could not reach Notion. Check your Notion connection in Connections.' }
     }
   }
 
   // ── Discord ────────────────────────────────────────────────────────────────
+  // Discord webhooks need no auth — POST the message straight to the webhook URL.
   if (appLower === 'discord') {
-    const message = String(pick(settings, 'message', 'content') ?? 'AutoFlow automation ran.')
     const webhookUrl = pick(settings, 'webhook_url', 'webhookUrl')
-
-    // Preferred: post straight to a Discord webhook URL (no auth needed).
-    if (webhookUrl) {
-      try {
-        const res = await fetch(String(webhookUrl), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ content: message }),
-        })
-        if (!res.ok) return { success: false, message: `Discord webhook error: HTTP ${res.status}` }
-        return { success: true, message: 'Message sent to Discord', data: { status: res.status } }
-      } catch {
-        return { success: false, message: 'Could not reach the Discord webhook URL. Check the URL.' }
+    if (!webhookUrl) {
+      return {
+        success: false,
+        message: 'Discord webhook URL not provided. Please rebuild this automation and enter your Discord webhook URL.',
       }
     }
-
-    // Fallback: bot token + channel id from connections.
-    const token = connections['discord']?.api_key
-    if (!token) return { success: false, message: 'Discord not connected. Provide a webhook URL in the step, or link a bot token in Connections.' }
-    const channelId = String(pick(settings, 'channel_id', 'channelId'))
+    const message = String(pick(settings, 'message', 'content') ?? 'AutoFlow automation ran.')
     try {
-      const res = await fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
+      const res = await fetch(String(webhookUrl), {
         method: 'POST',
-        headers: { Authorization: `Bot ${token}`, 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content: message }),
       })
-      if (!res.ok) return { success: false, message: `Discord error: ${res.status}` }
-      return { success: true, message: `Message sent to Discord channel`, data: {} }
+      if (!res.ok) return { success: false, message: 'Discord message could not be sent. Check your webhook URL.' }
+      return { success: true, message: 'Message sent to Discord', data: { status: res.status } }
     } catch {
-      return { success: false, message: 'Could not reach Discord. Check your bot token.' }
+      return { success: false, message: 'Could not reach the Discord webhook URL. Check the URL.' }
     }
   }
 
@@ -275,19 +284,19 @@ async function executeStep(
       })
       return { success: res.ok, message: `HTTP ${res.status} from ${url}`, data: { status: res.status } }
     } catch {
-      return { success: false, message: `Could not reach ${url}. Check the URL.` }
+      return { success: false, message: `Could not reach ${url}. Check the web address.` }
     }
   }
 
-  // ── Schedule / Webhook / Google Forms (passive triggers) ──────────────────
-  if (['schedule', 'webhook', 'google forms'].includes(appLower)) {
+  // ── Manual / Schedule / Webhook / Google Forms (passive triggers) ─────────
+  if (['manual', 'schedule', 'webhook', 'google forms'].includes(appLower)) {
     return { success: true, message: `${app}: trigger acknowledged` }
   }
 
-  // ── Default simulation for not-yet-integrated apps ─────────────────────────
+  // ── Fallback: unrecognized integrations run in simulation and still succeed ─
   return {
     success: true,
-    message: `${app} — "${action}" completed (simulated — real integration coming soon)`,
+    message: `'${app}' integration ran in simulation mode. Real execution coming soon.`,
     data: {},
   }
 }
@@ -342,11 +351,15 @@ export async function POST(req: NextRequest) {
 
   await supabase.from('automations').update({ status: 'running' }).eq('id', automation_id)
 
-  // Log trigger
+  // Log trigger — the first node always succeeds immediately and never fails.
+  const triggerApp = (workflow.trigger.app || 'Manual').toLowerCase()
+  const triggerMessage = triggerApp === 'manual'
+    ? 'Triggered manually'
+    : `Triggered manually (${workflow.trigger.app})`
   await addLog({
     step: 'Trigger',
     status: 'success',
-    message: `Trigger: ${workflow.trigger.app} — ${workflow.trigger.event}`,
+    message: triggerMessage,
     timestamp: new Date().toISOString(),
   })
 

@@ -46,9 +46,9 @@ function normalizeWorkflow(raw: unknown, description: string): WorkflowJSON {
   // --- Trigger ---
   const rawTrigger = (w.trigger ?? {}) as Record<string, unknown>
   const trigger = {
-    app: String(rawTrigger.app || 'Schedule'),
-    event: String(rawTrigger.event || 'On Schedule'),
-    description: String(rawTrigger.description || 'Starts this automation'),
+    app: String(rawTrigger.app || 'Manual'),
+    event: String(rawTrigger.event || 'Run Button Clicked'),
+    description: String(rawTrigger.description || 'Runs when you click the Run button.'),
     settings: (rawTrigger.settings && typeof rawTrigger.settings === 'object'
       ? rawTrigger.settings
       : {}) as Record<string, unknown>,

@@ -47,6 +47,7 @@ Output ONLY a single valid JSON object. No explanation. No markdown. No code blo
 1. Output MUST be parseable by JSON.parse. Double-quote every key and string. No trailing commas. No comments.
 2. EVERY DISTINCT ACTION = ONE NODE. Never combine two actions into one node. "Save to sheet AND send email" = TWO action nodes. NEVER return an empty actions array.
 3. The FIRST node is always the trigger — what starts the automation. Every node after it is an action, in execution order. Nodes connect linearly: trigger → action_1 → action_2 → …
+   - IF NO TRIGGER APP IS MENTIONED (e.g. "send an email to X", "post a message to Slack" with no schedule/form/event), use a MANUAL trigger as the first node: app "Manual", event "Run Button Clicked", description "Runs when you click the Run button.", settings {}, config_fields []. A Manual trigger means the automation runs when the user clicks Run.
 4. NEVER skip a step the user mentioned, even if it seems obvious or redundant.
 5. THE COUNT RULE: before writing JSON, count the distinct steps in the user's description. Your output must have EXACTLY that many nodes. "form submission → save to sheets → send email" = 3 nodes minimum (1 trigger + 2 actions). State the count to yourself, then write one node per step.
 6. Every node MUST have a complete "settings" object containing EVERY field needed to actually run that step (see APP CATALOG for the required keys per app). Plus a "config_fields" array listing which of those keys the user still needs to fill in.
@@ -68,6 +69,7 @@ Output ONLY a single valid JSON object. No explanation. No markdown. No code blo
 - Google Sheets → action "Add Row": {spreadsheet_id, sheet_name, values}; trigger "New Row": {spreadsheet_id, sheet_name}
 - Notion → action "Create Page": {database_id, title, properties}; action "Update Page": {page_id, properties}
 - HTTP Request → action "Call URL": {url, method (GET|POST|PUT|DELETE), headers, body}
+- Manual → trigger "Run Button Clicked": {} — use this when nothing else starts the automation; it runs when the user clicks Run
 - Schedule → trigger "On Schedule": {frequency (hourly|daily|weekly|monthly), time (HH:MM 24h), timezone, day_of_week (weekly only)}
 - Webhook → trigger "Incoming Request": {path (unique slug like "/my-form-hook"), method: "POST"}
 - Discord → action "Send Message": {webhook_url, message}
@@ -103,6 +105,9 @@ Count: 1 trigger (form submission) + 2 actions (add row, send email) = 3 nodes. 
 - action_2: Gmail / Send Email → settings: {"to": "{{trigger.email}}", "subject": "Thanks for your submission!", "body": ""}, config_fields: ["body"]
 
 # MORE SETTINGS EXAMPLES
+- Simple email send, no trigger app ("Send an email to a@b.com with subject Hi and body Hello"): 2 nodes —
+  trigger: Manual / Run Button Clicked → settings: {}, config_fields: []
+  action_1: Gmail / Send Email → settings: {"to": "a@b.com", "subject": "Hi", "body": "Hello"}, config_fields: []
 - Schedule daily 9am: "settings": {"frequency": "daily", "time": "09:00", "timezone": "UTC"}, "config_fields": []
 - Slack, channel unknown: "settings": {"channel": "", "message": ""}, "config_fields": ["channel", "message"]
 - Wait 5 minutes: action app "Delay" → "settings": {"duration": 300}, "config_fields": []

@@ -44,6 +44,7 @@ export const APP_ICONS: Record<string, string> = {
   schedule: '⏰',
   webhook: '🔗',
   delay: '⏳',
+  manual: '🖱️',
   'google forms': '📋',
   autoflow: '⚡',
   default: '⚙️',
