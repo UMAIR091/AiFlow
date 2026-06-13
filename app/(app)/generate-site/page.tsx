@@ -1,3 +1,4 @@
+import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { GenerateSiteClient } from './GenerateSiteClient'
 
@@ -7,12 +8,16 @@ interface Props {
 
 export default async function GenerateSitePage({ searchParams }: Props) {
   const supabase = createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+
+  // Layout + middleware already validated via getUser(); read the id locally.
+  const { data: { session } } = await supabase.auth.getSession()
+  const user = session?.user
+  if (!user) redirect('/auth')
 
   const { data: automations } = await supabase
     .from('automations')
     .select('id, name, workflow_json, description')
-    .eq('user_id', user!.id)
+    .eq('user_id', user.id)
     .order('created_at', { ascending: false })
 
   return (

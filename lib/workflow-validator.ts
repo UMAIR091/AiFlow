@@ -80,7 +80,7 @@ function completeNode<T extends { settings: Record<string, unknown>; config_fiel
   }
   // config_fields = keys that still need a value (expected ∪ model-listed, minus filled)
   const candidates = new Set<string>([...(node.config_fields ?? []), ...expectedKeys])
-  const config_fields = [...candidates].filter(k => {
+  const config_fields = Array.from(candidates).filter(k => {
     const v = settings[k]
     return v === '' || v === null || v === undefined
   })
